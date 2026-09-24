@@ -14,6 +14,11 @@ orden. No procesa dinero, tarjetas reales ni CVC.
    de prueba. Un token desconocido o fuera de alcance no aprueba un pago.
 3. `POST /payments/lookup`: solo el merchant, para consultar un token sin consumirlo.
 
+Con `PAYMENT_AP2_REQUIRED=true`, la delegación exige Payment Mandate SD-JWT del agente y Checkout
+JWT del merchant, verifica ambas firmas y su coincidencia con el allowance antes de emitir token.
+La confirmación genera un Payment Receipt firmado, recuperable por el agente autenticado mediante
+`POST /agentic_commerce/payment_receipt`. Es un perfil Human Present sintético: no hay cargo real.
+
 El estado vive en SQLite propia del proveedor. Guarda hashes de tokens y claves idempotentes;
 no guarda el número de tarjeta ni el token en claro. Las tarjetas sintéticas soportadas son
 `4242424242424242` (aprobada) y `4000000000000002` (rechazada). No use PAN reales.

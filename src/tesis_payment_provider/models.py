@@ -47,6 +47,8 @@ class DelegatePaymentRequest(StrictModel):
     allowance: Allowance
     risk_signals: list[RiskSignal] = Field(min_length=1)
     metadata: dict[str, str]
+    ap2_payment_mandate: str | None = Field(default=None, max_length=32_768, repr=False)
+    ap2_checkout_jwt: str | None = Field(default=None, max_length=32_768, repr=False)
 
 
 class DelegatePaymentResponse(StrictModel):
@@ -70,6 +72,7 @@ class PaymentResult(StrictModel):
     checkout_session_id: str
     amount: int
     currency: str
+    payment_receipt_jwt: str | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class LookupPaymentRequest(StrictModel):

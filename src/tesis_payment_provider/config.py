@@ -14,6 +14,11 @@ class Settings(BaseSettings):
     payment_token_secret: SecretStr = Field(default=SecretStr(""), repr=False)
     payment_merchant_id: str = Field(default="tesis_merchant", min_length=1)
     payment_sandbox_clock_at: datetime | None = None
+    payment_ap2_required: bool = False
+    payment_ap2_agent_jwk_json: SecretStr | None = Field(default=None, repr=False)
+    payment_ap2_merchant_jwk_json: SecretStr | None = Field(default=None, repr=False)
+    payment_ap2_merchant_issuer: str | None = None
+    payment_ap2_private_key_pem: SecretStr | None = Field(default=None, repr=False)
 
     @field_validator("payment_sandbox_clock_at")
     @classmethod
@@ -30,3 +35,12 @@ class Settings(BaseSettings):
         ):
             if len(secret.get_secret_value()) < 32:
                 raise ValueError("Payment secrets must contain at least 32 characters")
+        if self.payment_ap2_required and not all(
+            (
+                self.payment_ap2_agent_jwk_json,
+                self.payment_ap2_merchant_jwk_json,
+                self.payment_ap2_merchant_issuer,
+                self.payment_ap2_private_key_pem,
+            )
+        ):
+            raise ValueError("AP2 payment verification and receipt signing must be configured")

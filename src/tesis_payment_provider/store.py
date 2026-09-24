@@ -9,6 +9,7 @@ from pathlib import Path
 
 from pydantic import SecretStr
 
+from tesis_payment_provider.ap2 import PaymentAp2, PaymentMandateError
 from tesis_payment_provider.models import (
     ConfirmPaymentRequest,
     DelegatePaymentRequest,
@@ -46,11 +47,13 @@ class PaymentStore:
         merchant_id: str,
         *,
         clock: Callable[[], datetime] | None = None,
+        ap2: PaymentAp2 | None = None,
     ) -> None:
         self._path = path
         self._secret = token_secret
         self._merchant_id = merchant_id
         self._clock = clock or (lambda: datetime.now(UTC))
+        self._ap2 = ap2
 
     def initialize(self) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
@@ -70,10 +73,14 @@ class PaymentStore:
                     outcome TEXT NOT NULL,
                     confirmation_key_hash TEXT,
                     confirmation_hash TEXT,
-                    result_json TEXT
+                    result_json TEXT,
+                    payment_mandate_hash TEXT
                 );
                 """
             )
+            columns = {row["name"] for row in connection.execute("PRAGMA table_info(delegations)")}
+            if "payment_mandate_hash" not in columns:
+                connection.execute("ALTER TABLE delegations ADD COLUMN payment_mandate_hash TEXT")
 
     def delegate(
         self, request: DelegatePaymentRequest, *, idempotency_key: str
@@ -84,12 +91,15 @@ class PaymentStore:
         with closing(self._connect()) as connection, connection:
             connection.execute("BEGIN IMMEDIATE")
             existing = connection.execute(
-                "SELECT request_hash, created_at FROM delegations WHERE key_hash = ?",
+                "SELECT request_hash, created_at, payment_mandate_hash "
+                "FROM delegations WHERE key_hash = ?",
                 (key_hash,),
             ).fetchone()
             if existing is not None:
                 if existing["request_hash"] != request_hash:
                     raise PaymentError("idempotency_conflict", 409)
+                if self._ap2 is not None and existing["payment_mandate_hash"] is None:
+                    raise PaymentError("invalid_payment_mandate", 422)
                 created = datetime.fromisoformat(existing["created_at"])
                 return DelegatePaymentResponse(id=token, created=created, metadata={})
 
@@ -103,11 +113,15 @@ class PaymentStore:
                 raise PaymentError("invalid_test_card", 422)
             if int(request.payment_method.exp_year) < now.year:
                 raise PaymentError("expired_test_card", 422)
+            try:
+                mandate_hash = self._ap2.verify(request, self._merchant_id) if self._ap2 else None
+            except PaymentMandateError as error:
+                raise PaymentError("invalid_payment_mandate", 422) from error
             connection.execute(
                 """INSERT INTO delegations
                    (key_hash, request_hash, token_hash, created_at, merchant_id,
-                    checkout_id, max_amount, currency, expires_at, outcome)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    checkout_id, max_amount, currency, expires_at, outcome, payment_mandate_hash)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     key_hash,
                     request_hash,
@@ -119,6 +133,7 @@ class PaymentStore:
                     request.allowance.currency,
                     request.allowance.expires_at.isoformat(),
                     outcome,
+                    mandate_hash,
                 ),
             )
             return DelegatePaymentResponse(id=token, created=now, metadata={})
@@ -136,6 +151,8 @@ class PaymentStore:
             ).fetchone()
             if row is None:
                 raise PaymentError("unknown_token", 422)
+            if self._ap2 is not None and row["payment_mandate_hash"] is None:
+                raise PaymentError("invalid_payment_mandate", 422)
             if row["result_json"] is not None:
                 if (
                     row["confirmation_key_hash"] != key_hash
@@ -152,13 +169,24 @@ class PaymentStore:
                 or request.amount > row["max_amount"]
             ):
                 raise PaymentError("allowance_mismatch", 422)
+            payment_id = f"pay_{row['token_hash'][:32]}"
+            receipt = (
+                self._ap2.receipt(
+                    reference=row["payment_mandate_hash"],
+                    payment_id=payment_id,
+                    approved=row["outcome"] == "approved",
+                )
+                if self._ap2 and row["payment_mandate_hash"]
+                else None
+            )
             result = PaymentResult(
-                id=f"pay_{row['token_hash'][:32]}",
+                id=payment_id,
                 status=row["outcome"],
                 merchant_id=request.merchant_id,
                 checkout_session_id=request.checkout_session_id,
                 amount=request.amount,
                 currency=request.currency,
+                payment_receipt_jwt=receipt,
             )
             connection.execute(
                 """UPDATE delegations

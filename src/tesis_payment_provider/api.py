@@ -6,6 +6,7 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import SecretStr
 
+from tesis_payment_provider.ap2 import PaymentAp2
 from tesis_payment_provider.config import Settings
 from tesis_payment_provider.models import (
     ConfirmPaymentRequest,
@@ -32,11 +33,26 @@ def create_app(
             return sandbox_clock
 
         clock = fixed_sandbox_clock
+    ap2 = None
+    if config.payment_ap2_required:
+        agent_key = config.payment_ap2_agent_jwk_json
+        merchant_key = config.payment_ap2_merchant_jwk_json
+        receipt_key = config.payment_ap2_private_key_pem
+        issuer = config.payment_ap2_merchant_issuer
+        if agent_key is None or merchant_key is None or receipt_key is None or issuer is None:
+            raise RuntimeError("AP2 payment configuration is incomplete")
+        ap2 = PaymentAp2(
+            agent_jwk_json=agent_key.get_secret_value(),
+            merchant_jwk_json=merchant_key.get_secret_value(),
+            merchant_issuer=issuer,
+            private_key_pem=receipt_key.get_secret_value(),
+        )
     store = PaymentStore(
         config.payment_database_path,
         config.payment_token_secret,
         config.payment_merchant_id,
         clock=clock,
+        ap2=ap2,
     )
     store.initialize()
     app = FastAPI(title="Tesis Payment Provider Sandbox", version="0.1.0")
@@ -75,6 +91,12 @@ def create_app(
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    @app.get("/.well-known/ap2/jwks.json")
+    def ap2_jwks() -> dict[str, object]:
+        if ap2 is None:
+            raise HTTPException(status_code=503, detail={"code": "ap2_unavailable"})
+        return {"keys": [ap2.public_jwk]}
+
     @app.post(
         "/agentic_commerce/delegate_payment",
         status_code=201,
@@ -95,6 +117,10 @@ def create_app(
 
     @app.post("/payments/lookup", dependencies=[Depends(merchant_auth)])
     def lookup_payment(request: LookupPaymentRequest) -> PaymentLookup:
+        return store.lookup(request.token)
+
+    @app.post("/agentic_commerce/payment_receipt", dependencies=[Depends(agent_auth)])
+    def agent_payment_receipt(request: LookupPaymentRequest) -> PaymentLookup:
         return store.lookup(request.token)
 
     return app
