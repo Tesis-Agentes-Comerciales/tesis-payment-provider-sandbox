@@ -49,6 +49,15 @@ class DelegatePaymentRequest(StrictModel):
     metadata: dict[str, str]
     ap2_payment_mandate: str | None = Field(default=None, max_length=32_768, repr=False)
     ap2_checkout_jwt: str | None = Field(default=None, max_length=32_768, repr=False)
+    # Human Not Present only: the checkout mandate chain whose open mandate
+    # `payment.reference` points to. Left out of the dump when absent, so the
+    # Human Present idempotency fingerprint and token stay byte-identical.
+    ap2_checkout_mandate: str | None = Field(
+        default=None,
+        max_length=65_536,
+        repr=False,
+        exclude_if=lambda value: value is None,
+    )
 
 
 class DelegatePaymentResponse(StrictModel):

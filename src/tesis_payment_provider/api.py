@@ -85,7 +85,10 @@ def create_app(
     def payment_error_handler(_, error: PaymentError):  # type: ignore[no-untyped-def]
         from fastapi.responses import JSONResponse
 
-        return JSONResponse(status_code=error.status_code, content={"code": error.code})
+        content = {"code": error.code}
+        if error.receipt is not None:
+            content["payment_receipt_jwt"] = error.receipt
+        return JSONResponse(status_code=error.status_code, content=content)
 
     @app.get("/health")
     def health() -> dict[str, str]:

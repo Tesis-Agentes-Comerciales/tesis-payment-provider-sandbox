@@ -9,7 +9,12 @@ from pathlib import Path
 
 from pydantic import SecretStr
 
-from tesis_payment_provider.ap2 import PaymentAp2, PaymentMandateError
+from tesis_payment_provider.ap2 import (
+    MandateChainRejected,
+    PaymentAp2,
+    PaymentMandateError,
+    is_mandate_chain,
+)
 from tesis_payment_provider.models import (
     ConfirmPaymentRequest,
     DelegatePaymentRequest,
@@ -25,10 +30,11 @@ TEST_CARDS = {
 
 
 class PaymentError(RuntimeError):
-    def __init__(self, code: str, status_code: int) -> None:
+    def __init__(self, code: str, status_code: int, *, receipt: str | None = None) -> None:
         super().__init__(code)
         self.code = code
         self.status_code = status_code
+        self.receipt = receipt
 
 
 def _digest(value: str) -> str:
@@ -113,10 +119,15 @@ class PaymentStore:
                 raise PaymentError("invalid_test_card", 422)
             if int(request.payment_method.exp_year) < now.year:
                 raise PaymentError("expired_test_card", 422)
-            try:
-                mandate_hash = self._ap2.verify(request, self._merchant_id) if self._ap2 else None
-            except PaymentMandateError as error:
-                raise PaymentError("invalid_payment_mandate", 422) from error
+            if is_mandate_chain(request):
+                mandate_hash = self._verify_chain(request, key_hash)
+            else:
+                try:
+                    mandate_hash = (
+                        self._ap2.verify(request, self._merchant_id) if self._ap2 else None
+                    )
+                except PaymentMandateError as error:
+                    raise PaymentError("invalid_payment_mandate", 422) from error
             connection.execute(
                 """INSERT INTO delegations
                    (key_hash, request_hash, token_hash, created_at, merchant_id,
@@ -208,6 +219,16 @@ class PaymentStore:
             return PaymentLookup(status="not_confirmed")
         result = PaymentResult.model_validate_json(row["result_json"])
         return PaymentLookup(status=result.status, result=result)
+
+    def _verify_chain(self, request: DelegatePaymentRequest, key_hash: str) -> str:
+        """Human Not Present: verify the chains or answer with a signed AP2 error receipt."""
+        if self._ap2 is None:
+            raise PaymentError("mandates_not_supported", 503)
+        try:
+            return self._ap2.verify_chain(request, self._merchant_id)
+        except MandateChainRejected as rejection:
+            receipt = self._ap2.error_receipt(rejection, payment_id=f"pay_rejected_{key_hash[:32]}")
+            raise PaymentError(rejection.code, 422, receipt=receipt) from rejection
 
     def _token(self, key_hash: str, request_hash: str) -> str:
         digest = hmac.new(
