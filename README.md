@@ -19,6 +19,18 @@ JWT del merchant, verifica ambas firmas y su coincidencia con el allowance antes
 La confirmación genera un Payment Receipt firmado, recuperable por el agente autenticado mediante
 `POST /agentic_commerce/payment_receipt`. Es un perfil Human Present sintético: no hay cargo real.
 
+Human Not Present (perfil `ap2-hnp/v1`, en `docs/ap2-profile.md` del repo del agente): el agente
+envía en `ap2_payment_mandate` la cadena de pago `<abierto>~~<cerrado>` y en el campo
+`ap2_checkout_mandate` la cadena de checkout. El proveedor fija la raíz por el thumbprint de la JWK
+del agente, verifica las dos cadenas (`aud`, `nonce`, `sd_hash`, `vct`, `iat`/`exp`), las
+restricciones del abierto de pago (`amount_range`, `allowed_payees`,
+`allowed_payment_instruments` y `reference` contra el abierto de checkout) y las mismas
+comprobaciones de Human Present sobre el cerrado y el allowance. Un rechazo responde 422
+`{"code", "payment_receipt_jwt"}` con un recibo de error AP2 firmado (`invalid_credential`,
+`invalid_mandate` o `unresolved_constraint`); sin AP2 configurado, una cadena recibe 503
+`mandates_not_supported` sin recibo. La idempotencia se consulta antes de verificar, igual que en
+Human Present.
+
 El estado vive en SQLite propia del proveedor. Guarda hashes de tokens y claves idempotentes;
 no guarda el número de tarjeta ni el token en claro. Las tarjetas sintéticas soportadas son
 `4242424242424242` (aprobada) y `4000000000000002` (rechazada). No use PAN reales.
