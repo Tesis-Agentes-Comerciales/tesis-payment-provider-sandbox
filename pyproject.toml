@@ -34,7 +34,7 @@ packages = ["src/tesis_payment_provider"]
 testpaths = ["tests"]
 
 [tool.pyright]
-include = ["src", "tests"]
+include = ["src", "tests", "scripts"]
 pythonVersion = "3.12"
 typeCheckingMode = "standard"
 venvPath = "."

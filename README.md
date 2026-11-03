@@ -55,6 +55,10 @@ uv run pyright
 uv run pytest
 ```
 
+El [procedimiento CI-PSP-01](docs/testing.md) añade build, versiones fijadas, la ejecución
+completa con JUnit individual y las guardas contra omisiones. GitHub Actions conserva
+resultados y hashes; una verificación local no cierra la validación compartida.
+
 Este servicio implementa un subconjunto de Delegate Payment de ACP `2026-04-17` para el
 experimento, no conformidad ACP integral. No hay cargos, liquidación, reembolsos, disputas ni
 3DS. El merchant mantiene la responsabilidad del checkout, inventario y orden.
