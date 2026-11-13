@@ -1,4 +1,4 @@
-"""Tests never read the developer's .env: Settings come only from what each test passes."""
+"""Tests never read the developer's .env file; each test passes the settings it needs."""
 
 import pytest
 
