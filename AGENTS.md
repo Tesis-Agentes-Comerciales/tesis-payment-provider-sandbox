@@ -1,11 +1,16 @@
-# Payment provider sandbox
+# Proveedor de pagos simulado
 
-This repository is an independent synthetic PSP for the ACP thesis. Python 3.12 and `uv`.
-Run `uv run ruff format --check .`, `uv run ruff check .`, `uv run pyright`, and
-`uv run pytest` before handing off changes.
+Este repositorio es el proveedor de pagos simulado e independiente de la tesis. Python 3.12 y `uv`;
+use `uv sync`, no `pip`, y no edite `uv.lock` a mano. Antes de entregar cambios, `scripts/check.sh`
+debe pasar en verde: es la compuerta local (lock, formato, lint, tipos y pruebas).
 
-No real card credentials, CVC, charges, settlement, or refunds. The provider owns delegation,
-token scope, expiry, single-use confirmation, and test outcomes. Tokens must remain opaque to
-the agent and merchant; neither service may infer payment success from token text. Do not store
-raw cards, bearer credentials, or tokens in SQLite, logs, or committed files. Preserve separate
-agent and merchant authentication and idempotent effectful POSTs.
+Sin tarjetas reales, CVC, cargos, liquidación ni reembolsos. El proveedor es dueño de la
+delegación, el alcance y el vencimiento del token, la confirmación de un solo uso y el resultado de
+las tarjetas de prueba. Los tokens son opacos para el agente y el comercio: ninguno puede deducir
+del texto del token si el pago se aprueba. No guarde tarjetas, Bearer ni tokens en claro en SQLite,
+logs o archivos versionados. Mantenga separadas la autenticación del agente y la del comercio, y
+los POST con efecto idempotentes.
+
+`uv run demo-stack`, en el repositorio del agente, arranca este servicio con
+`uvicorn tesis_payment_provider.api:app_factory --factory` en el puerto 4130 y le pasa sus
+variables `PAYMENT_*`; no cambie ese punto de entrada ni esas variables.
