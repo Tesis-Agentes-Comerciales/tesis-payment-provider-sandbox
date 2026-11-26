@@ -15,7 +15,7 @@ comercio y este proveedor.
 | `POST /payments/confirm` | Comercio | Consume el token si el cobro cabe en ese límite y responde `approved` o `declined`. |
 | `POST /payments/lookup` | Comercio | Consulta un token sin consumirlo. |
 | `POST /agentic_commerce/payment_receipt` | Agente | Devuelve el recibo de pago firmado. |
-| `GET /.well-known/ap2/jwks.json` | Cualquiera | Publica la llave con la que se verifican los recibos. |
+| `GET /.well-known/ap2/jwks.json` | Cualquiera | Con AP2 activo, publica la llave con la que se verifican los recibos. |
 | `GET /health` | Cualquiera | Responde `{"status": "ok"}`. |
 
 El agente y el comercio tienen cada uno su propio Bearer, y ninguno puede usar las rutas del otro.
@@ -24,8 +24,8 @@ Con `PAYMENT_AP2_REQUIRED=true`, que es como lo arranca la demo, el proveedor no
 sin verificar antes el mandato de pago que firma el agente y el checkout que firma el comercio, y
 que ambos coincidan con el límite del pago. En las compras delegadas, cuando el comprador no está
 presente, verifica además la cadena que empieza en el mandato abierto, emitido cuando el comprador
-dio su consentimiento por adelantado, y sus límites de monto, comercios e instrumentos de pago. Un
-rechazo responde 422 con un recibo de error firmado. El perfil completo está en
+dio su consentimiento por adelantado, y sus límites de monto, comercios e instrumentos de pago. Si
+esa cadena no pasa, responde 422 con un recibo de error firmado. El perfil completo está en
 [`docs/ap2-profile.md`](https://github.com/Tesis-Agentes-Comerciales/tesis-commerce-agent/blob/main/docs/ap2-profile.md)
 del agente.
 
