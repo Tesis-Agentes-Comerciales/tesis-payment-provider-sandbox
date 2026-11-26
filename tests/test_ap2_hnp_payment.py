@@ -1,7 +1,7 @@
 """Human Not Present payment chains (profile `ap2-hnp/v1`, «Verificación en el PSP»).
 
 The chains are built here with the AP2 SDK and keys generated per test, following the
-profile; they are not the golden fixtures of the agent's issuer (HNP-04).
+profile; they are not the golden chains the agent exports to its `tests/fixtures/ap2_hnp/`.
 """
 
 import hashlib
